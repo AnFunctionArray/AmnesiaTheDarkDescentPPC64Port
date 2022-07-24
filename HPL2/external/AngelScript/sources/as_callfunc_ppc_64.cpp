@@ -86,17 +86,29 @@ extern "C"
 #define EXTRA_STACK_SIZE  (PPC_LINKAGE_SIZE + PPC_REGSTORE_SIZE) // memory required, not including parameters, for the stack frame
 #define PPC_STACK_SIZE(numParams)  ( -(( ( (((numParams)<8)?8:(numParams))<<3) + EXTRA_STACK_SIZE + 15 ) & ~15) ) // calculates the total stack size needed for ppcFunc64, must pad to 16bytes
 
+__attribute__((naked)) extern "C" void condJump(void *base) {
+asm volatile(""
+	"add  %r0, %r3, %r28\n"
+	"mr %r3, %r31\n"
+	"mtctr %r0\n"
+	"bctr\n"
+);
+}
+
+extern "C" void ppcTypeSwitch(), ppcArgsEnd(), ppcArgsInteger(), ppcLoadIntReg(), ppcLoadIntRegUpd(), ppcLoadFloatReg(), ppcLoadFloatRegUpd(), ppcLoadDoubleReg(), ppcLoadDoulbeRegUpd(), ppcArgIsLong(), ppcLoadLongReg(),
+	ppcLoadLongRegUpd(), ppcArgIsFloat(), ppcArgIsDouble();
+
 // This is PowerPC 64 bit specific
 // Loads all data into the correct places and calls the function.
 // ppcArgsType is an array containing a byte type (enum argTypes) for each argument.
 // StackArgSizeInBytes is the size in bytes of the stack frame (takes into account linkage area, etc. must be multiple of 16)
-extern "C" asQWORD ppcFunc64(const asDWORD* argsPtr, int StackArgSizeInBytes, asDWORD func);
-asm(""
-	".text\n"
-	".align 4\n"
-	".p2align 4,,15\n"
-	".globl .ppcFunc64\n"
-	".ppcFunc64:\n"
+__attribute__((naked)) extern "C" asQWORD ppcFunc64(const asDWORD* argsPtr, int StackArgSizeInBytes, asDWORD func, asBYTE *){
+asm volatile(""
+	//".text\n"
+	//".align 4\n"
+	//".p2align 4,,15\n"
+	//".globl .ppcFunc64\n"
+	//".ppcFunc64:\n"
 
 	// function prolog
 	"std %r22, -0x08(%r1)\n"  // we need a register other than r0, to store the old stack pointer
@@ -116,6 +128,7 @@ asm(""
 	"std %r3, 0x30(%r22)\n"   // save our parameters
 	"std %r4, 0x38(%r22)\n"   //
 	"std %r5, 0x40(%r22)\n"   //
+	"mr  %r25, %r6\n"
 	"mr  %r31, %r1\n"         // functions tend to store the stack pointer here too
 
 	// initial registers for the function
@@ -127,8 +140,8 @@ asm(""
 	"mr  %r22,%r0\n"         // zero our r22, which holds the number of used float registers
 
 	// load the global ppcArgsType which holds the types of arguments for each argument
-	"lis %r25, ppcArgsType@ha\n"       // load the upper 16 bits of the address to r25
-	"addi %r25, %r25, ppcArgsType@l\n" // load the lower 16 bits of the address to r25
+	//"lis %r25, ppcArgsType@ha\n"       // load the upper 16 bits of the address to r25
+	//"addi %r25, %r25, ppcArgsType@l\n" // load the lower 16 bits of the address to r25
 	"subi %r25, %r25, 1\n"             // since we increment r25 on its use, we'll pre-decrement it
 
 	// loop through the arguments
@@ -137,23 +150,35 @@ asm(""
 	// switch based on the current argument type (0:end, 1:int, 2:float 3:double)
 	"lbz %r24, 0(%r25)\n"          // load the current argument type (it's a byte)
 	"mulli %r24, %r24, 4\n"        // our jump table has 4 bytes per case (1 instruction)
-	"lis %r30, ppcTypeSwitch@ha\n" // load the address of the jump table for the switch
-	"addi %r30, %r30, ppcTypeSwitch@l\n"
-	"add %r0, %r30, %r24\n"        // offset by our argument type
-	"mtctr %r0\n"                  // load the jump address into CTR
-	"bctr\n"                       // jump into the jump table/switch
-	"nop\n"
+	"mr %r28, %r24\n"
+	"mr %r31, %r3\n"
+	//"mr %r4, %r24\n"
+	//"mr %r24, %r3\n" 
+	//"li %r30, ppcTypeSwitch\n" // load the address of the jump table for the switch
+	//"addi %r30, %r30, ppcTypeSwitch@l\n"
+	//"add %r0, %r30, %r24\n"        // offset by our argument type
+	//"mtctr %r0\n"                  // load the jump address into CTR
+	//"bctr\n"                       // jump into the jump table/switch
+	//"nop\n"
 	// the jump table/switch based on the current argument type
-	"ppcTypeSwitch:\n"
+	//"ppcTypeSwitch:\n"
+);
+	condJump(ppcTypeSwitch);
+}
+__attribute__((naked)) extern "C" void ppcTypeSwitch() {
+asm volatile(""
 	"b ppcArgsEnd\n"
 	"b ppcArgIsInteger\n"
 	"b ppcArgIsFloat\n"
 	"b ppcArgIsDouble\n"
 	"b ppcArgIsLong\n"
-
+);
+}
+__attribute__((naked)) extern "C" void ppcArgsEnd() {
+asm volatile(""
 	// when we get here we have finished processing all the arguments
 	// everything is ready to go to call the function
-	"ppcArgsEnd:\n"
+	//"ppcArgsEnd:\n"
 	"mtctr %r27\n"        // the function pointer is stored in r27, load that into CTR
 	"bctrl\n"             // call the function.  We have to do it this way so that the LR gets the proper
 	"nop\n"               // return value (the next instruction below).  So we have to branch from CTR instead of LR.
@@ -174,20 +199,32 @@ asm(""
 	"mr %r1, %r11\n"         // restore the caller's SP
 	"blr\n"                  // return back to the caller
 	"nop\n"
+);
+}
+__attribute__((naked)) extern "C" void ppcArgIsInteger() {
+asm volatile(""
 	// Integer argument (GPR register)
-	"ppcArgIsInteger:\n"
-	"lis %r30,ppcLoadIntReg@ha\n"  // load the address to the jump table for integer registers
-	"addi %r30, %r30, ppcLoadIntReg@l\n"
+	//"ppcArgIsInteger:\n"
+	//"li %r30,ppcLoadIntReg\n"  // load the address to the jump table for integer registers
+	//"addi %r30, %r30, ppcLoadIntReg@l\n"
 	"mulli %r0, %r23, 8\n"         // each item in the jump table is 2 instructions (8 bytes)
-	"add %r0, %r0, %r30\n"         // calculate ppcLoadIntReg[numUsedGPRRegs]
+	
+	//"add %r0, %r0, %r30\n"         // calculate ppcLoadIntReg[numUsedGPRRegs]
 	"lwz %r30,0(%r29)\n"           // load the next argument from the argument list into r30
 	"cmpwi %r23, 8\n"              // we can only load GPR3 through GPR10 (8 registers)
 	"bgt ppcLoadIntRegUpd\n"       // if we're beyond 8 GPR registers, we're in the stack, go there
-	"mtctr %r0\n"                  // load the address of our ppcLoadIntReg jump table (we're below 8 GPR registers)
-	"bctr\n"                       // load the argument into a GPR register
-	"nop\n"
+	//"mtctr %r0\n"                  // load the address of our ppcLoadIntReg jump table (we're below 8 GPR registers)
+	//"bctr\n"                       // load the argument into a GPR register
+	//"nop\n"
+	"mr %r28, %r0\n"
+	"mr %r31, %r3\n"
+);
+	condJump(ppcLoadIntReg);
+}
+__attribute__((naked)) extern "C" void ppcLoadIntReg() {
+asm volatile(""
 	// jump table for GPR registers, for the first 8 GPR arguments
-	"ppcLoadIntReg:\n"
+	//"ppcLoadIntReg:\n"
 	"mr %r3,%r30\n"         // arg0 (to r3)
 	"b ppcLoadIntRegUpd\n"
 	"mr %r4,%r30\n"         // arg1 (to r4)
@@ -204,29 +241,42 @@ asm(""
 	"b ppcLoadIntRegUpd\n"
 	"mr %r10,%r30\n"        // arg7 (to r10)
 	"b ppcLoadIntRegUpd\n"
-
+);
+}
+__attribute__((naked)) extern "C" void ppcLoadIntRegUpd() {
+asm volatile(""
 	// all GPR arguments still go on the stack
-	"ppcLoadIntRegUpd:\n"
+	//"ppcLoadIntRegUpd:\n"
 	"std  %r30,0(%r26)\n"   // store the argument into the next slot on the stack's argument list
 	"addi %r23, %r23, 1\n"  // count a used GPR register
 	"addi %r29, %r29, 4\n"  // move to the next argument on the list
 	"addi %r26, %r26, 8\n"  // adjust our argument stack pointer for the next
 	"b ppcNextArg\n"        // next argument
-
+);
+}
+__attribute__((naked)) extern "C" void ppcArgIsFloat() {
+asm volatile(""
 	// single Float argument
-	"ppcArgIsFloat:\n"
-	"lis %r30,ppcLoadFloatReg@ha\n"   // get the base address of the float register jump table
-	"addi %r30, %r30, ppcLoadFloatReg@l\n"
+	//"ppcArgIsFloat:\n"
+	//"li %r30,ppcLoadFloatReg\n"   // get the base address of the float register jump table
+	//"addi %r30, %r30, ppcLoadFloatReg@l\n"
 	"mulli %r0, %r22 ,8\n"            // each jump table entry is 8 bytes
-	"add %r0, %r0, %r30\n"            // calculate the offset to ppcLoadFloatReg[numUsedFloatReg]
+	//"add %r0, %r0, %r30\n"            // calculate the offset to ppcLoadFloatReg[numUsedFloatReg]
 	"lfs 0, 0(%r29)\n"                // load the next argument as a float into f0
 	"cmpwi %r22, 13\n"                // can't load more than 13 float/double registers
 	"bgt ppcLoadFloatRegUpd\n"        // if we're beyond 13 registers, just fall to inserting into the stack
-	"mtctr %r0\n"                     // jump into the float jump table
-	"bctr\n"
-	"nop\n"
+	//"mtctr %r0\n"                     // jump into the float jump table
+	//"bctr\n"
+	//"nop\n"
+	"mr %r28, %r0\n"
+	"mr %r31, %r3\n"
+);
+	condJump(ppcLoadFloatReg);
+}
+__attribute__((naked)) extern "C" void ppcLoadFloatReg() {
+asm volatile(""
 	// jump table for float registers, for the first 13 float arguments
-	"ppcLoadFloatReg:\n"
+	//"ppcLoadFloatReg:\n"
 	"fmr 1,0\n"                // arg0 (f1)
 	"b ppcLoadFloatRegUpd\n"
 	"fmr 2,0\n"                // arg1 (f2)
@@ -254,8 +304,12 @@ asm(""
 	"fmr 13,0\n"               // arg12 (f13)
 	"b ppcLoadFloatRegUpd\n"
 	"nop\n"
+);
+}
+__attribute__((naked)) extern "C" void ppcLoadFloatRegUpd() {
+asm volatile(""
 	// all float arguments still go on the stack
-	"ppcLoadFloatRegUpd:\n"
+	//"ppcLoadFloatRegUpd:\n"
 	"stfs 0, 0x04(%r26)\n"     // store, as a single float, f0 (current argument) on to the stack argument list
 	"addi %r23, %r23, 1\n"     // a float register eats up a GPR register
 	"addi %r22, %r22, 1\n"     // ...and, of course, a float register
@@ -263,20 +317,31 @@ asm(""
 	"addi %r26, %r26, 8\n"     // move to the next stack slot
 	"b ppcNextArg\n"           // on to the next argument
 	"nop\n"
+);
+}
+__attribute__((naked)) extern "C" void ppcArgIsDouble() {
+asm volatile(""
 	// double Float argument
-	"ppcArgIsDouble:\n"
-	"lis %r30, ppcLoadDoubleReg@ha\n" // load the base address of the jump table for double registers
-	"addi %r30, %r30, ppcLoadDoubleReg@l\n"
+	//"ppcArgIsDouble:\n"
+	//"li %r30, ppcLoadDoubleReg\n" // load the base address of the jump table for double registers
+	//"addi %r30, %r30, ppcLoadDoubleReg@l\n"
 	"mulli %r0, %r22, 8\n"            // each slot of the jump table is 8 bytes
-	"add %r0, %r0, %r30\n"            // calculate ppcLoadDoubleReg[numUsedFloatReg]
+	//"add %r0, %r0, %r30\n"            // calculate ppcLoadDoubleReg[numUsedFloatReg]
 	"lfd 0, 0(%r29)\n"                // load the next argument, as a double float, into f0
 	"cmpwi %r22,13\n"                 // the first 13 floats must go into float registers also
 	"bgt ppcLoadDoubleRegUpd\n"       // if we're beyond 13, then just put on to the stack
-	"mtctr %r0\n"                     // we're under 13, first load our register
-	"bctr\n"                          // jump into the jump table
-	"nop\n"
+	//"mtctr %r0\n"                     // we're under 13, first load our register
+	//"bctr\n"                          // jump into the jump table
+	//"nop\n"
+	"mr %r28, %r0\n"
+	"mr %r31, %r3\n"
+);
+	condJump(ppcLoadDoubleReg);
+}
+__attribute__((naked)) extern "C" void ppcLoadDoubleReg() {
+asm volatile(""
 	// jump table for float registers, for the first 13 float arguments
-	"ppcLoadDoubleReg:\n"
+	//"ppcLoadDoubleReg:\n"
 	"fmr 1,0\n"                // arg0 (f1)
 	"b ppcLoadDoubleRegUpd\n"
 	"fmr 2,0\n"                // arg1 (f2)
@@ -304,8 +369,12 @@ asm(""
 	"fmr 13,0\n"               // arg12 (f13)
 	"b ppcLoadDoubleRegUpd\n"
 	"nop\n"
+);
+}
+__attribute__((naked)) extern "C" void ppcLoadDoubleRegUpd() {
+asm volatile (""
 	// all float arguments still go on the stack
-	"ppcLoadDoubleRegUpd:\n"
+	//"ppcLoadDoubleRegUpd:\n"
 	"stfd 0,0(%r26)\n"         // store f0, as a double, into the argument list on the stack
 	"addi %r23, %r23, 1\n"     // a double float eats up one GPR
 	"addi %r22, %r22, 1\n"     // ...and, of course, a float
@@ -313,21 +382,30 @@ asm(""
 	"addi %r26, %r26, 8\n"     // increment to the next slot on the argument list on the stack (8 bytes)
 	"b ppcNextArg\n"           // on to the next argument
 	"nop\n"
-
+);
+}
+__attribute__((naked)) extern "C" void ppcArgIsLong() {
+asm volatile (""
 	// Long (64 bit int) argument
-	"ppcArgIsLong:\n"
-	"lis %r30,ppcLoadLongReg@ha\n"  // load the address to the jump table for integer64
-	"addi %r30, %r30, ppcLoadLongReg@l\n"
+	//"ppcArgIsLong:\n"
+	//"li %r30,ppcLoadLongReg\n"  // load the address to the jump table for integer64
+	//"addi %r30, %r30, ppcLoadLongReg@l\n"
 	"mulli %r0, %r23, 8\n"         // each item in the jump table is 2 instructions (8 bytes)
-	"add %r0, %r0, %r30\n"         // calculate ppcLoadLongReg[numUsedGPRRegs]
+	//"add %r0, %r0, %r30\n"         // calculate ppcLoadLongReg[numUsedGPRRegs]
 	"ld  %r30,0(%r29)\n"           // load the next argument from the argument list into r30
 	"cmpwi %r23, 8\n"              // we can only load GPR3 through GPR10 (8 registers)
 	"bgt ppcLoadLongRegUpd\n"      // if we're beyond 8 GPR registers, we're in the stack, go there
-	"mtctr %r0\n"                  // load the address of our ppcLoadLongReg jump table (we're below 8 GPR registers)
-	"bctr\n"                       // load the argument into a GPR register
-	"nop\n"
+	//"mtctr %r0\n"                  // load the address of our ppcLoadLongReg jump table (we're below 8 GPR registers)
+	//"bctr\n"                       // load the argument into a GPR register
+	//"nop\n"
+	"mr %r28, %r0\n"
+	"mr %r31, %r3\n"
+);
+}
+__attribute__((naked)) extern "C" void ppcLoadLongReg() {
+asm volatile (""
 	// jump table for GPR registers, for the first 8 GPR arguments
-	"ppcLoadLongReg:\n"
+	//"ppcLoadLongReg:\n"
 	"mr %r3,%r30\n"         // arg0 (to r3)
 	"b ppcLoadLongRegUpd\n"
 	"mr %r4,%r30\n"         // arg1 (to r4)
@@ -344,15 +422,19 @@ asm(""
 	"b ppcLoadLongRegUpd\n"
 	"mr %r10,%r30\n"        // arg7 (to r10)
 	"b ppcLoadLongRegUpd\n"
-
+);
+}
+__attribute__((naked)) extern "C" void ppcLoadLongRegUpd() {
+asm volatile (""
 	// all GPR arguments still go on the stack
-	"ppcLoadLongRegUpd:\n"
+	//"ppcLoadLongRegUpd:\n"
 	"std  %r30,0(%r26)\n"   // store the argument into the next slot on the stack's argument list
 	"addi %r23, %r23, 1\n"  // count a used GPR register
 	"addi %r29, %r29, 8\n"  // move to the next argument on the list
 	"addi %r26, %r26, 8\n"  // adjust our argument stack pointer for the next
 	"b ppcNextArg\n"        // next argument
-);
+	);
+}
 
 static asDWORD GetReturnedFloat(void)
 {
@@ -398,7 +480,7 @@ static void stackArgs( const asDWORD *args, const asBYTE *argsType, int &numIntA
 		case ppcDOUBLEARG:
 			{
 				// stow double
-				memcpy( &ppcArgs[argWordPos], &args[i], sizeof(double) ); // we have to do this because of alignment
+				memcpy( &ppcArgs[argWordPos], &args[i], sizeof(double) ); // have to do this because of alignment
 				numDoubleArgs++;
 				argWordPos+=2; //add two words
 				i++;//doubles take up 2 argument slots
@@ -457,7 +539,7 @@ static asQWORD CallCDeclFunction(const asDWORD* pArgs, const asBYTE *pArgsType, 
 	}
 
 	// call the function with the arguments
-	return ppcFunc64( ppcArgs, PPC_STACK_SIZE(numTotalArgs), func );
+	return ppcFunc64( ppcArgs, PPC_STACK_SIZE(numTotalArgs), func, ppcArgsType );
 }
 
 // This function is identical to CallCDeclFunction, with the only difference that
@@ -489,7 +571,7 @@ static asQWORD CallThisCallFunction(const void *obj, const asDWORD* pArgs, const
 	}
 
 	// call the function with the arguments
-	return ppcFunc64( ppcArgs, PPC_STACK_SIZE(numTotalArgs), func);
+	return ppcFunc64( ppcArgs, PPC_STACK_SIZE(numTotalArgs), func, ppcArgsType);
 }
 
 // This function is identical to CallCDeclFunction, with the only difference that
@@ -524,7 +606,7 @@ static asQWORD CallThisCallFunction_objLast(const void *obj, const asDWORD* pArg
 	}
 
 	// call the function with the arguments
-	return ppcFunc64( ppcArgs, PPC_STACK_SIZE(numTotalArgs), func );
+	return ppcFunc64( ppcArgs, PPC_STACK_SIZE(numTotalArgs), func, ppcArgsType );
 }
 
 // returns true if the given parameter is a 'variable argument'
