@@ -5,25 +5,26 @@ set(AngelScript_VERSION_MAJOR 2)
 set(AngelScript_VERSION_MINOR 19)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-
+set(CMAKE_C_FLAGS "-Werror -D__LP64__ -DAS_PPC_64 -fpermissive -fpie -mlongcall")
+set(CMAKE_CXX_FLAGS "-Werror -D__LP64__ -DAS_PPC_64 -fpermissive -fpie -mlongcall")
 add_library(AngelScript STATIC
   sources/as_arrayobject.cpp
   sources/as_atomic.cpp
   sources/as_builder.cpp
   sources/as_bytecode.cpp
-  sources/as_callfunc_arm_gcc.S
-  sources/as_callfunc_arm_msvc.asm
-  sources/as_callfunc_arm_xcode.s
-  sources/as_callfunc_arm.cpp
-  sources/as_callfunc_mips.cpp
+  #sources/as_callfunc_arm_gcc.S
+  #sources/as_callfunc_arm_msvc.asm
+  #sources/as_callfunc_arm_xcode.s
+  #sources/as_callfunc_arm.cpp
+  #sources/as_callfunc_mips.cpp
   sources/as_callfunc_ppc_64.cpp
-  sources/as_callfunc_ppc.cpp
-  sources/as_callfunc_sh4.cpp
-  sources/as_callfunc_x64_gcc.cpp
-  sources/as_callfunc_x64_msvc_asm.asm
-  sources/as_callfunc_x64_msvc.cpp
-  sources/as_callfunc_x86.cpp
-  sources/as_callfunc_xenon.cpp
+  #sources/as_callfunc_ppc.cpp
+  #sources/as_callfunc_sh4.cpp
+  #sources/as_callfunc_x64_gcc.cpp
+  #sources/as_callfunc_x64_msvc_asm.asm
+  #sources/as_callfunc_x64_msvc.cpp
+  #sources/as_callfunc_x86.cpp
+  #  sources/as_callfunc_xenon.cpp
   sources/as_callfunc.cpp
   sources/as_compiler.cpp
   sources/as_configgroup.cpp

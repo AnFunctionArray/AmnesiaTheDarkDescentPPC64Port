@@ -86,29 +86,47 @@ extern "C"
 #define EXTRA_STACK_SIZE  (PPC_LINKAGE_SIZE + PPC_REGSTORE_SIZE) // memory required, not including parameters, for the stack frame
 #define PPC_STACK_SIZE(numParams)  ( -(( ( (((numParams)<8)?8:(numParams))<<3) + EXTRA_STACK_SIZE + 15 ) & ~15) ) // calculates the total stack size needed for ppcFunc64, must pad to 16bytes
 
-__attribute__((naked)) extern "C" void condJump(void *base) {
+extern "C" void condJump(void (*base)()) {
 asm volatile(""
 	"add  %r0, %r3, %r28\n"
+	//"addi %r0, %r0, 8\n"
 	"mr %r3, %r31\n"
 	"mtctr %r0\n"
-	"bctr\n"
+	//"bctr\n"
+	//"blr\n"
 );
+return;
 }
 
 extern "C" void ppcTypeSwitch(), ppcArgsEnd(), ppcArgsInteger(), ppcLoadIntReg(), ppcLoadIntRegUpd(), ppcLoadFloatReg(), ppcLoadFloatRegUpd(), ppcLoadDoubleReg(), ppcLoadDoulbeRegUpd(), ppcArgIsLong(), ppcLoadLongReg(),
-	ppcLoadLongRegUpd(), ppcArgIsFloat(), ppcArgIsDouble();
+	ppcLoadLongRegUpd(); extern "C" asQWORD ppcFunc64(const asDWORD* argsPtr, int StackArgSizeInBytes, asDWORD func, asBYTE *); extern "C" void ppcArgIsFloat(), ppcArgIsDouble(), ppcNextArg();
 
 // This is PowerPC 64 bit specific
 // Loads all data into the correct places and calls the function.
 // ppcArgsType is an array containing a byte type (enum argTypes) for each argument.
 // StackArgSizeInBytes is the size in bytes of the stack frame (takes into account linkage area, etc. must be multiple of 16)
-__attribute__((naked)) extern "C" asQWORD ppcFunc64(const asDWORD* argsPtr, int StackArgSizeInBytes, asDWORD func, asBYTE *){
+extern "C" asQWORD ppcFunc64__(const asDWORD* argsPtr, int StackArgSizeInBytes, asDWORD func, asBYTE *){
 asm volatile(""
 	//".text\n"
 	//".align 4\n"
 	//".p2align 4,,15\n"
-	//".globl .ppcFunc64\n"
-	//".ppcFunc64:\n"
+	".global ppcTypeSwitch\n"
+	".global ppcArgsEnd\n"
+	".global ppcArgsInteger\n"
+	".global ppcLoadIntReg\n"
+	".global ppcLoadIntRegUpd\n"
+	".global ppcLoadFloatReg\n"
+	".global ppcLoadFloatRegUpd\n"
+	".global ppcLoadDoubleReg\n"
+	".global ppcLoadDoulbeRegUpd\n"
+	".global ppcArgIsLong\n"
+	".global ppcLoadLongReg\n"
+	".global ppcLoadLongRegUpd\n"
+	".global ppcArgIsFloat\n"
+	".global ppcArgIsDouble\n"
+	".global ppcNextArg\n"
+	".global ppcFunc64\n"
+	"ppcFunc64:\n"
 
 	// function prolog
 	"std %r22, -0x08(%r1)\n"  // we need a register other than r0, to store the old stack pointer
@@ -143,7 +161,7 @@ asm volatile(""
 	//"lis %r25, ppcArgsType@ha\n"       // load the upper 16 bits of the address to r25
 	//"addi %r25, %r25, ppcArgsType@l\n" // load the lower 16 bits of the address to r25
 	"subi %r25, %r25, 1\n"             // since we increment r25 on its use, we'll pre-decrement it
-
+	"b ppcNextArg\n"
 	// loop through the arguments
 	"ppcNextArg:\n"
 	"addi %r25, %r25, 1\n"         // increment r25, our arg type pointer
@@ -161,24 +179,24 @@ asm volatile(""
 	//"bctr\n"                       // jump into the jump table/switch
 	//"nop\n"
 	// the jump table/switch based on the current argument type
-	//"ppcTypeSwitch:\n"
 );
 	condJump(ppcTypeSwitch);
-}
-__attribute__((naked)) extern "C" void ppcTypeSwitch() {
-asm volatile(""
+	asm volatile ("bctr");
+//}
+//extern "C" __attribute__((naked))void ppcTypeSwitch() {
+asm volatile("ppcTypeSwitch:"
 	"b ppcArgsEnd\n"
 	"b ppcArgIsInteger\n"
 	"b ppcArgIsFloat\n"
 	"b ppcArgIsDouble\n"
 	"b ppcArgIsLong\n"
-);
-}
-__attribute__((naked)) extern "C" void ppcArgsEnd() {
-asm volatile(""
+//);
+//}
+//extern "C" __attribute__((naked))void ppcArgsEnd() {
+//asm volatile(""
 	// when we get here we have finished processing all the arguments
 	// everything is ready to go to call the function
-	//"ppcArgsEnd:\n"
+	"ppcArgsEnd:\n"
 	"mtctr %r27\n"        // the function pointer is stored in r27, load that into CTR
 	"bctrl\n"             // call the function.  We have to do it this way so that the LR gets the proper
 	"nop\n"               // return value (the next instruction below).  So we have to branch from CTR instead of LR.
@@ -199,12 +217,9 @@ asm volatile(""
 	"mr %r1, %r11\n"         // restore the caller's SP
 	"blr\n"                  // return back to the caller
 	"nop\n"
-);
-}
-__attribute__((naked)) extern "C" void ppcArgIsInteger() {
-asm volatile(""
+
 	// Integer argument (GPR register)
-	//"ppcArgIsInteger:\n"
+	"ppcArgIsInteger:\n"
 	//"li %r30,ppcLoadIntReg\n"  // load the address to the jump table for integer registers
 	//"addi %r30, %r30, ppcLoadIntReg@l\n"
 	"mulli %r0, %r23, 8\n"         // each item in the jump table is 2 instructions (8 bytes)
@@ -220,11 +235,10 @@ asm volatile(""
 	"mr %r31, %r3\n"
 );
 	condJump(ppcLoadIntReg);
-}
-__attribute__((naked)) extern "C" void ppcLoadIntReg() {
-asm volatile(""
+	asm volatile("bctr");
+	asm volatile(
 	// jump table for GPR registers, for the first 8 GPR arguments
-	//"ppcLoadIntReg:\n"
+	"ppcLoadIntReg:\n"
 	"mr %r3,%r30\n"         // arg0 (to r3)
 	"b ppcLoadIntRegUpd\n"
 	"mr %r4,%r30\n"         // arg1 (to r4)
@@ -241,23 +255,16 @@ asm volatile(""
 	"b ppcLoadIntRegUpd\n"
 	"mr %r10,%r30\n"        // arg7 (to r10)
 	"b ppcLoadIntRegUpd\n"
-);
-}
-__attribute__((naked)) extern "C" void ppcLoadIntRegUpd() {
-asm volatile(""
+
 	// all GPR arguments still go on the stack
-	//"ppcLoadIntRegUpd:\n"
+	"ppcLoadIntRegUpd:\n"
 	"std  %r30,0(%r26)\n"   // store the argument into the next slot on the stack's argument list
 	"addi %r23, %r23, 1\n"  // count a used GPR register
 	"addi %r29, %r29, 4\n"  // move to the next argument on the list
 	"addi %r26, %r26, 8\n"  // adjust our argument stack pointer for the next
 	"b ppcNextArg\n"        // next argument
-);
-}
-__attribute__((naked)) extern "C" void ppcArgIsFloat() {
-asm volatile(""
 	// single Float argument
-	//"ppcArgIsFloat:\n"
+	"ppcArgIsFloat:\n"
 	//"li %r30,ppcLoadFloatReg\n"   // get the base address of the float register jump table
 	//"addi %r30, %r30, ppcLoadFloatReg@l\n"
 	"mulli %r0, %r22 ,8\n"            // each jump table entry is 8 bytes
@@ -272,11 +279,10 @@ asm volatile(""
 	"mr %r31, %r3\n"
 );
 	condJump(ppcLoadFloatReg);
-}
-__attribute__((naked)) extern "C" void ppcLoadFloatReg() {
-asm volatile(""
+	asm volatile("bctr");
+	asm volatile(
 	// jump table for float registers, for the first 13 float arguments
-	//"ppcLoadFloatReg:\n"
+	"ppcLoadFloatReg:\n"
 	"fmr 1,0\n"                // arg0 (f1)
 	"b ppcLoadFloatRegUpd\n"
 	"fmr 2,0\n"                // arg1 (f2)
@@ -304,12 +310,8 @@ asm volatile(""
 	"fmr 13,0\n"               // arg12 (f13)
 	"b ppcLoadFloatRegUpd\n"
 	"nop\n"
-);
-}
-__attribute__((naked)) extern "C" void ppcLoadFloatRegUpd() {
-asm volatile(""
 	// all float arguments still go on the stack
-	//"ppcLoadFloatRegUpd:\n"
+	"ppcLoadFloatRegUpd:\n"
 	"stfs 0, 0x04(%r26)\n"     // store, as a single float, f0 (current argument) on to the stack argument list
 	"addi %r23, %r23, 1\n"     // a float register eats up a GPR register
 	"addi %r22, %r22, 1\n"     // ...and, of course, a float register
@@ -317,12 +319,8 @@ asm volatile(""
 	"addi %r26, %r26, 8\n"     // move to the next stack slot
 	"b ppcNextArg\n"           // on to the next argument
 	"nop\n"
-);
-}
-__attribute__((naked)) extern "C" void ppcArgIsDouble() {
-asm volatile(""
 	// double Float argument
-	//"ppcArgIsDouble:\n"
+	"ppcArgIsDouble:\n"
 	//"li %r30, ppcLoadDoubleReg\n" // load the base address of the jump table for double registers
 	//"addi %r30, %r30, ppcLoadDoubleReg@l\n"
 	"mulli %r0, %r22, 8\n"            // each slot of the jump table is 8 bytes
@@ -337,11 +335,10 @@ asm volatile(""
 	"mr %r31, %r3\n"
 );
 	condJump(ppcLoadDoubleReg);
-}
-__attribute__((naked)) extern "C" void ppcLoadDoubleReg() {
-asm volatile(""
+	asm volatile ("bctr");
+	asm volatile(
 	// jump table for float registers, for the first 13 float arguments
-	//"ppcLoadDoubleReg:\n"
+	"ppcLoadDoubleReg:\n"
 	"fmr 1,0\n"                // arg0 (f1)
 	"b ppcLoadDoubleRegUpd\n"
 	"fmr 2,0\n"                // arg1 (f2)
@@ -369,12 +366,8 @@ asm volatile(""
 	"fmr 13,0\n"               // arg12 (f13)
 	"b ppcLoadDoubleRegUpd\n"
 	"nop\n"
-);
-}
-__attribute__((naked)) extern "C" void ppcLoadDoubleRegUpd() {
-asm volatile (""
 	// all float arguments still go on the stack
-	//"ppcLoadDoubleRegUpd:\n"
+	"ppcLoadDoubleRegUpd:\n"
 	"stfd 0,0(%r26)\n"         // store f0, as a double, into the argument list on the stack
 	"addi %r23, %r23, 1\n"     // a double float eats up one GPR
 	"addi %r22, %r22, 1\n"     // ...and, of course, a float
@@ -382,12 +375,8 @@ asm volatile (""
 	"addi %r26, %r26, 8\n"     // increment to the next slot on the argument list on the stack (8 bytes)
 	"b ppcNextArg\n"           // on to the next argument
 	"nop\n"
-);
-}
-__attribute__((naked)) extern "C" void ppcArgIsLong() {
-asm volatile (""
 	// Long (64 bit int) argument
-	//"ppcArgIsLong:\n"
+	"ppcArgIsLong:\n"
 	//"li %r30,ppcLoadLongReg\n"  // load the address to the jump table for integer64
 	//"addi %r30, %r30, ppcLoadLongReg@l\n"
 	"mulli %r0, %r23, 8\n"         // each item in the jump table is 2 instructions (8 bytes)
@@ -400,12 +389,8 @@ asm volatile (""
 	//"nop\n"
 	"mr %r28, %r0\n"
 	"mr %r31, %r3\n"
-);
-}
-__attribute__((naked)) extern "C" void ppcLoadLongReg() {
-asm volatile (""
 	// jump table for GPR registers, for the first 8 GPR arguments
-	//"ppcLoadLongReg:\n"
+	"ppcLoadLongReg:\n"
 	"mr %r3,%r30\n"         // arg0 (to r3)
 	"b ppcLoadLongRegUpd\n"
 	"mr %r4,%r30\n"         // arg1 (to r4)
@@ -422,18 +407,15 @@ asm volatile (""
 	"b ppcLoadLongRegUpd\n"
 	"mr %r10,%r30\n"        // arg7 (to r10)
 	"b ppcLoadLongRegUpd\n"
-);
-}
-__attribute__((naked)) extern "C" void ppcLoadLongRegUpd() {
-asm volatile (""
 	// all GPR arguments still go on the stack
-	//"ppcLoadLongRegUpd:\n"
+	"ppcLoadLongRegUpd:\n"
 	"std  %r30,0(%r26)\n"   // store the argument into the next slot on the stack's argument list
 	"addi %r23, %r23, 1\n"  // count a used GPR register
 	"addi %r29, %r29, 8\n"  // move to the next argument on the list
 	"addi %r26, %r26, 8\n"  // adjust our argument stack pointer for the next
 	"b ppcNextArg\n"        // next argument
 	);
+	return 0; //not used
 }
 
 static asDWORD GetReturnedFloat(void)
@@ -518,7 +500,7 @@ static asQWORD CallCDeclFunction(const asDWORD* pArgs, const asBYTE *pArgsType, 
 	if( retInMemory )
 	{
 		// the first argument is the 'return in memory' pointer
-		ppcArgs[0]     = (asDWORD)retInMemory;
+		ppcArgs[0]     = (size_t)retInMemory;
 		ppcArgsType[0] = ppcINTARG;
 		ppcArgsType[1] = ppcENDARG;
 		baseArgCount   = 1;
@@ -550,14 +532,14 @@ static asQWORD CallThisCallFunction(const void *obj, const asDWORD* pArgs, const
 	if( retInMemory )
 	{
 		// the first argument is the 'return in memory' pointer
-		ppcArgs[0]     = (asDWORD)retInMemory;
+		ppcArgs[0]     = (size_t)retInMemory;
 		ppcArgsType[0] = ppcINTARG;
 		ppcArgsType[1] = ppcENDARG;
 		baseArgCount   = 1;
 	}
 
 	// the first argument is the 'this' of the object
-	ppcArgs[baseArgCount]       = (asDWORD)obj;
+	ppcArgs[baseArgCount]       = (size_t)obj;
 	ppcArgsType[baseArgCount++] = ppcINTARG;
 	ppcArgsType[baseArgCount]   = ppcENDARG;
 
@@ -584,7 +566,7 @@ static asQWORD CallThisCallFunction_objLast(const void *obj, const asDWORD* pArg
 	if( retInMemory )
 	{
 		// the first argument is the 'return in memory' pointer
-		ppcArgs[0]     = (asDWORD)retInMemory;
+		ppcArgs[0]     = (size_t)retInMemory;
 		ppcArgsType[0] = ppcINTARG;
 		ppcArgsType[1] = ppcENDARG;
 		baseArgCount = 1;
@@ -600,7 +582,7 @@ static asQWORD CallThisCallFunction_objLast(const void *obj, const asDWORD* pArg
 	{
 		// put the object pointer at the end
 		int argPos = intArgs + floatArgs + (doubleArgs * 2) + (longArgs *2);
-		ppcArgs[argPos]             = (asDWORD)obj;
+		ppcArgs[argPos]             = (size_t)obj;
 		ppcArgsType[numTotalArgs++] = ppcINTARG;
 		ppcArgsType[numTotalArgs]   = ppcENDARG;
 	}
@@ -743,7 +725,7 @@ int CallSystemFunction(int id, asCContext *context, void *objectPointer)
 			popSize++;
 
 			// Check for null pointer
-			obj = (void*)*(args);
+			obj = (void*)(size_t)*(args);
 			if( obj == NULL )
 			{
 				context->SetInternalException(TXT_NULL_POINTER_ACCESS);
@@ -755,7 +737,7 @@ int CallSystemFunction(int id, asCContext *context, void *objectPointer)
 			}
 
 			// Add the base offset for multiple inheritance
-			obj = (void*)(int(obj) + sysFunc->baseOffset);
+			obj = (void*)((size_t)(obj) + sysFunc->baseOffset);
 
 			// Skip the object pointer
 			args++;
@@ -856,25 +838,25 @@ int CallSystemFunction(int id, asCContext *context, void *objectPointer)
 	case ICC_CDECL_RETURNINMEM:
 	case ICC_STDCALL:
 	case ICC_STDCALL_RETURNINMEM:
-		retQW = CallCDeclFunction( args, argsType, paramSize, (asDWORD)func, retInMemPointer );
+		retQW = CallCDeclFunction( args, argsType, paramSize, (size_t)func, retInMemPointer );
 		break;
 	case ICC_THISCALL:
 	case ICC_THISCALL_RETURNINMEM:
-		retQW = CallThisCallFunction(obj, args, argsType, paramSize, (asDWORD)func, retInMemPointer );
+		retQW = CallThisCallFunction(obj, args, argsType, paramSize, (size_t)func, retInMemPointer );
 		break;
 	case ICC_VIRTUAL_THISCALL:
 	case ICC_VIRTUAL_THISCALL_RETURNINMEM:
 		// Get virtual function table from the object pointer
 		vftable = *(asDWORD**)obj;
-		retQW = CallThisCallFunction( obj, args, argsType, paramSize, vftable[asDWORD(func)>>2], retInMemPointer );
+		retQW = CallThisCallFunction( obj, args, argsType, paramSize, vftable[size_t(func)>>2], retInMemPointer );
 		break;
 	case ICC_CDECL_OBJLAST:
 	case ICC_CDECL_OBJLAST_RETURNINMEM:
-		retQW = CallThisCallFunction_objLast( obj, args, argsType, paramSize, (asDWORD)func, retInMemPointer );
+		retQW = CallThisCallFunction_objLast( obj, args, argsType, paramSize, (size_t)func, retInMemPointer );
 		break;
 	case ICC_CDECL_OBJFIRST:
 	case ICC_CDECL_OBJFIRST_RETURNINMEM:
-		retQW = CallThisCallFunction( obj, args, argsType, paramSize, (asDWORD)func, retInMemPointer );
+		retQW = CallThisCallFunction( obj, args, argsType, paramSize, (size_t)func, retInMemPointer );
 		break;
 	default:
 		context->SetInternalException(TXT_INVALID_CALLING_CONVENTION);
@@ -896,7 +878,7 @@ int CallSystemFunction(int id, asCContext *context, void *objectPointer)
 				!descr->parameterTypes[n].IsReference() &&
 				(descr->parameterTypes[n].GetObjectType()->flags & COMPLEX_MASK) )
 			{
-				void *obj = (void*)args[spos++];
+				void *obj = (void*)(size_t)args[spos++];
 				asSTypeBehaviour *beh = &descr->parameterTypes[n].GetObjectType()->beh;
 				if( beh->destruct )
 				{
@@ -925,7 +907,7 @@ int CallSystemFunction(int id, asCContext *context, void *objectPointer)
 		if( descr->returnType.IsObjectHandle() )
 		{
 			// returning an object handle
-			context->regs.objectRegister = (void*)(asDWORD)retQW;
+			context->regs.objectRegister = (void*)(size_t)retQW;
 
 			if( sysFunc->returnAutoHandle && context->regs.objectRegister )
 			{
@@ -1050,7 +1032,7 @@ int CallSystemFunction(int id, asCContext *context, void *objectPointer)
 			if( sysFunc->paramAutoHandles[n] && args[spos] )
 			{
 				// Call the release method on the type
-				engine->CallObjectMethod((void*)args[spos], descr->parameterTypes[n].GetObjectType()->beh.release);
+				engine->CallObjectMethod((void*)(size_t)args[spos], descr->parameterTypes[n].GetObjectType()->beh.release);
 				args[spos] = 0;
 			}
 

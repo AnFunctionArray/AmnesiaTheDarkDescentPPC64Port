@@ -29,7 +29,7 @@
 #define ROUNDING_MASK		0x0fffff3ff
 #define ROUNDING_DOWN		0x000000400
 
-#ifdef _WIN_32_VER
+#if 0//fdef _WIN_32_VER
  dgFloat32 dgAbsf(dgFloat32 x)
 {
 	_asm fld	x;
@@ -299,8 +299,8 @@ void dgApi GetMinMax (dgVector &minOut, dgVector &maxOut, const dgFloat32* const
 
 #if defined (__linux__) || defined (_MINGW_32_VER) || defined (_MINGW_64_VER) || defined (__FreeBSD__)
 /*	#define cpuid(func,ax,bx,cx,dx)	__asm__ __volatile__ ("cpuid": "=a" (ax), "=b" (bx), "=c" (cx), "=d" (dx) : "a" (func)); */
-
-#ifndef __x86_64__
+//##if 0
+#if 0//ndef __x86_64__
 	void cpuid(dgUnsigned32 op, dgUnsigned32 reg[4])
 	{
 		asm volatile(
@@ -327,21 +327,22 @@ void dgApi GetMinMax (dgVector &minOut, dgVector &maxOut, const dgFloat32* const
 
 	dgCpuClass dgApi dgGetCpuType ()
 	{
-#ifndef __x86_64__
-		#define bit_MMX (1 << 23)
-		#define bit_SSE (1 << 25)
-		#define bit_SSE2 (1 << 26)
+	return dgSimdPresent;
+//#ifndef __x86_64__
+//		#define bit_MMX (1 << 23)
+//		#define bit_SSE (1 << 25)
+//		#define bit_SSE2 (1 << 26)
 
-#ifndef __USE_DOUBLE_PRECISION__
-		if (i386_cpuid() & bit_SSE) {
-			return dgSimdPresent;
-		}
-#endif
-		#endif
-		return dgNoSimdPresent;
+//#ifndef __USE_DOUBLE_PRECISION__
+//		if (i386_cpuid() & bit_SSE) {
+//			return dgSimdPresent;
+//		}
+//#endif
+//		#endif
+//		return dgNoSimdPresent;
 	}
+//#endif
 #endif
-
 
 namespace InternalGeoUtil
 {

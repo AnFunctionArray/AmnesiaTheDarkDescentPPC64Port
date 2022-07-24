@@ -188,7 +188,7 @@ AS_API asIScriptEngine *asCreateScriptEngine(asDWORD version)
 	// Verify the size of the types
 	asASSERT( sizeof(asBYTE)  == 1 );
 	asASSERT( sizeof(asWORD)  == 2 );
-	asASSERT( sizeof(asDWORD) == 4 );
+	//asASSERT( sizeof(asDWORD) == 4 );
 	asASSERT( sizeof(asQWORD) == 8 );
 	asASSERT( sizeof(asPWORD) == sizeof(void*) );
 
@@ -198,8 +198,8 @@ AS_API asIScriptEngine *asCreateScriptEngine(asDWORD version)
 
 	// Verify endianess
 #ifdef AS_BIG_ENDIAN
-	asASSERT( *(asDWORD*)"\x00\x01\x02\x03" == 0x00010203 );
-	asASSERT( *(asQWORD*)"\x00\x01\x02\x03\x04\x05\x06\x07" == I64(0x0001020304050607) );
+	//asASSERT( *(asDWORD*)"\x00\x01\x02\x03" == 0x00010203 );
+	//asASSERT( *(asQWORD*)"\x00\x01\x02\x03\x04\x05\x06\x07" == I64(0x0001020304050607) );
 #else
 	asASSERT( *(asDWORD*)"\x00\x01\x02\x03" == 0x03020100 );
 	asASSERT( *(asQWORD*)"\x00\x01\x02\x03\x04\x05\x06\x07" == I64(0x0706050403020100) );

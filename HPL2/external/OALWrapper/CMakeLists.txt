@@ -100,6 +100,9 @@ TARGET_INCLUDE_DIRECTORIES(OALWrapper
     ${OALWRAPPER_INCLUDE_PATHS}
 )
 
+set(CMAKE_C_FLAGS "-D__ppc__ -fpie")
+set(CMAKE_CXX_FLAGS "-D__ppc__ -fpie")
+
 ADD_EXECUTABLE(SimpleTest EXCLUDE_FROM_ALL tests/Simple/main.cpp)
 TARGET_LINK_LIBRARIES(SimpleTest OALWrapper)
 
